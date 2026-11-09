@@ -7,6 +7,17 @@ import AppKit
 import Sparkle
 #endif
 
+/// The Settings window's tabs. The choice sits in UserDefaults, so the rail
+/// can open the window on a given tab, or switch an open one, by writing it.
+enum SettingsTab: String, CaseIterable {
+    case general
+    case notifications
+    case privacy
+    case about
+
+    static let defaultsKey = "settingsTab"
+}
+
 struct SettingsView: View {
     #if canImport(Sparkle)
     let updater: SPUUpdater
@@ -19,6 +30,7 @@ struct SettingsView: View {
     #endif
 
     @Environment(AppState.self) private var appState
+    @AppStorage(SettingsTab.defaultsKey) private var selectedTabRaw = SettingsTab.general.rawValue
 
     var body: some View {
         // Settings is its own window, which the lock screen doesn't cover.
@@ -39,26 +51,33 @@ struct SettingsView: View {
     }
 
     private var settingsTabs: some View {
-        TabView {
+        TabView(selection: Binding(
+            get: { SettingsTab(rawValue: selectedTabRaw) ?? .general },
+            set: { selectedTabRaw = $0.rawValue }
+        )) {
             GeneralSettingsView()
                 .tabItem {
                     Label("General", systemImage: "gear")
                 }
+                .tag(SettingsTab.general)
 
             NotificationSettingsView()
                 .tabItem {
                     Label("Notifications", systemImage: "bell")
                 }
+                .tag(SettingsTab.notifications)
 
             PrivacySettingsView()
                 .tabItem {
                     Label("Privacy", systemImage: "lock")
                 }
+                .tag(SettingsTab.privacy)
 
             aboutTab
                 .tabItem {
                     Label("About", systemImage: "info.circle")
                 }
+                .tag(SettingsTab.about)
         }
         .frame(width: 520, height: 460)
     }
@@ -98,6 +117,8 @@ struct GeneralSettingsView: View {
     @AppStorage(GlobalPlacement.edgeKey) private var globalEdgeRaw = GlobalEdge.start.rawValue
     @AppStorage(GlobalPlacement.barKey) private var globalBarRaw = GlobalBar.spaces.rawValue
     @AppStorage(WindowGlassStyle.defaultsKey) private var glassStyleRaw = WindowGlassStyle.defaultStyle.rawValue
+    @AppStorage(TitleBandColor.enabledKey) private var isTitleBandColored = false
+    @AppStorage(TitleBandColor.hexKey) private var titleBandHex = TitleBandColor.defaultHex
 
     private let presenceManager = AppPresenceManager()
 
@@ -161,6 +182,14 @@ struct GeneralSettingsView: View {
                     Text("Glass lets the desktop show through behind the rail and the bars, and Clear lets more of it through than Regular. Pages stay solid. So does the whole window while Reduce Transparency is on.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                Toggle("Color the title bar", isOn: $isTitleBandColored)
+                if isTitleBandColored {
+                    ColorPicker("Title bar color", selection: Binding(
+                        get: { TitleBandColor.color(fromHex: titleBandHex) },
+                        set: { titleBandHex = TitleBandColor.hex(from: $0) }
+                    ), supportsOpacity: false)
                 }
 
                 Picker("Layout", selection: Binding(

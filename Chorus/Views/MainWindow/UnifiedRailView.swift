@@ -53,6 +53,7 @@ struct UnifiedRailView: View {
     @Query private var allGroups: [ServiceGroup]
     @Environment(\.modelContext) private var modelContext
     @Environment(AppState.self) private var appState
+    @Environment(\.openSettings) private var openSettings
     /// What any rail is dragging. See `RailDragState`.
     private var drag: RailDragState { .shared }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -127,7 +128,28 @@ struct UnifiedRailView: View {
     /// What the vertical rail takes from the window now, gutter included.
     private var railFootprint: CGFloat {
         if globalsOnly { return SpaceStripMetrics.width(showingNames: stripShowsNames) }
+        if isFlush { return FlushRail.width }
         return showServiceNames ? RailWidth.clampNamed(CGFloat(namedWidth)) : ServiceRowView.compactRailWidth
+    }
+
+    /// Whether this rail lies flush against the window, with the larger
+    /// `FlushRail` cells. Only the left rail with icons alone does.
+    private var isFlush: Bool {
+        axis == .vertical && !globalsOnly
+            && ChorusCard.isFlush(layout: appState.railLayout, showsNames: showServiceNames)
+    }
+
+    /// The gap to the window's leading and bottom edges.
+    private var railGutter: CGFloat { isFlush ? 0 : ChorusCard.gutter }
+
+    /// Space between two rows of the vertical list.
+    private var rowSpacing: CGFloat { isFlush ? FlushRail.spacing : 2 }
+
+    /// A nameless cell in the vertical list.
+    private var compactCellSize: CGSize {
+        isFlush
+            ? CGSize(width: FlushRail.cellSize, height: FlushRail.cellSize)
+            : CGSize(width: ServiceRowView.compactRailCellWidth, height: ServiceRowView.rowHeight)
     }
 
     /// Whether rows carry names: the rail's setting, or the strip's when this
@@ -137,7 +159,7 @@ struct UnifiedRailView: View {
     }
 
     /// The rail's column, less the gutter.
-    private var railColumnWidth: CGFloat { railFootprint - ChorusCard.gutter }
+    private var railColumnWidth: CGFloat { railFootprint - railGutter }
 
     /// A named row's width at the rail's current width.
     private var namedRowWidth: CGFloat { ServiceRowView.rowWidth(forRail: railFootprint) }
@@ -360,14 +382,16 @@ struct UnifiedRailView: View {
                                 .padding(.bottom, 4)
 
                             let spaceItems = groups[space.id] ?? []
-                            VStack(spacing: 2) {
+                            VStack(spacing: rowSpacing) {
                                 if spaceItems.isEmpty {
                                     emptySpaceCell(for: space)
                                 } else {
                                     allServicesRuns(spaceItems, in: space)
                                 }
                             }
-                            .padding(ChorusCard.railPadding)
+                            // Flush, the card leaves the cells as much room as
+                            // the column does.
+                            .padding(isFlush ? (FlushRail.width - FlushRail.cellSize) / 2 : ChorusCard.railPadding)
                             .railCard()
                         case .divider(let divider):
                             dividerRow(divider, in: .spaces, length: railColumnWidth)
@@ -391,12 +415,15 @@ struct UnifiedRailView: View {
             }
 
             allServicesAddButtons
-                .padding(.vertical, ChorusCard.railPadding)
+                .padding(.top, ChorusCard.railPadding)
+            settingsButtons
+                .padding(.bottom, ChorusCard.railPadding)
         }
         .measuringHeight(into: $railHeight)
-        .railCardFrame(width: railColumnWidth, topInset: contentInset, carded: false)
+        .railCardFrame(width: railColumnWidth, topInset: contentInset, carded: false, gutter: railGutter)
         .railDropZone()
         .environment(\.railWidth, railFootprint)
+        .environment(\.isFlushRail, isFlush)
         // Names on and off move the rail between its two forms; the width
         // itself follows the pointer while it is dragged and does not animate.
         .animation(ChorusMotion.animation(ChorusMotion.sidebar, reduceMotion: reduceMotion), value: showServiceNames)
@@ -461,7 +488,7 @@ struct UnifiedRailView: View {
                         .fixedSize()
                         .opacity(space.isMutedEffective ? 0.5 : 1)
                         .accessibilityHidden(true)
-                        .frame(width: ServiceRowView.railCardWidth(showsName: false))
+                        .frame(width: railColumnWidth)
                 }
             }
             .frame(height: 22)
@@ -528,7 +555,7 @@ struct UnifiedRailView: View {
                 // Where the row labels start.
                 .frame(maxWidth: .infinity, alignment: showServiceNames ? .leading : .center)
                 .padding(.horizontal, showServiceNames ? 34 : 0)
-                .frame(height: ServiceRowView.rowHeight)
+                .frame(height: showServiceNames ? ServiceRowView.rowHeight : compactCellSize.height)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -612,7 +639,7 @@ struct UnifiedRailView: View {
     /// side by side, the nameless pair shared 32 points and read as one
     /// cramped control.
     private var allServicesAddButtons: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: rowSpacing) {
             allServicesAddButton(
                 title: "Add service",
                 systemImage: "plus",
@@ -659,8 +686,8 @@ struct UnifiedRailView: View {
                     .frame(width: namedRowWidth, height: ServiceRowView.rowHeight)
                 } else {
                     Image(systemName: systemImage)
-                        .font(.system(size: 12, weight: .medium))
-                        .frame(width: ServiceRowView.compactRailCellWidth, height: ServiceRowView.rowHeight)
+                        .font(.system(size: isFlush ? FlushRail.glyphSize : 12, weight: .medium))
+                        .frame(width: compactCellSize.width, height: compactCellSize.height)
                 }
             }
             .contentShape(Rectangle())
@@ -789,7 +816,7 @@ struct UnifiedRailView: View {
             // the fixed-width cells and pushed them off the rail's centre line.
             FadingVerticalScrollView {
                 // 2 points between 28 point rows is the drawn 30 point pitch.
-                LazyVStack(spacing: 2) {
+                LazyVStack(spacing: rowSpacing) {
                     if let spaceID = selectedSpaceID {
                         spaceRuns(spaceItems, in: spaceID, showsName: showServiceNames) { item, group, box in
                             railItemRow(item, in: .space(spaceID), group: group, box: box)
@@ -813,14 +840,17 @@ struct UnifiedRailView: View {
             railRule
 
             addServiceButton
-                .padding(.vertical, ChorusCard.railPadding)
+                .padding(.top, ChorusCard.railPadding)
+            settingsButtons
+                .padding(.bottom, ChorusCard.railPadding)
         }
         // One list needs no card of its own: it sits on the window, and the
         // web card beside it is the one card in the layout.
         .measuringHeight(into: $railHeight)
-        .railCardFrame(width: railColumnWidth, topInset: contentInset, carded: false)
+        .railCardFrame(width: railColumnWidth, topInset: contentInset, carded: false, gutter: railGutter)
         .railDropZone()
         .environment(\.railWidth, railFootprint)
+        .environment(\.isFlushRail, isFlush)
         .animation(ChorusMotion.animation(ChorusMotion.sidebar, reduceMotion: reduceMotion), value: showServiceNames)
     }
 
@@ -1151,7 +1181,7 @@ struct UnifiedRailView: View {
 
     /// A row's width in a vertical list, with or without names.
     private var namedOrCompactRowWidth: CGFloat {
-        namesShown ? namedRowWidth : ServiceRowView.compactRailCellWidth
+        namesShown ? namedRowWidth : compactCellSize.width
     }
 
     @ViewBuilder
@@ -1559,10 +1589,10 @@ struct UnifiedRailView: View {
                     .frame(width: namedRowWidth, height: ServiceRowView.rowHeight)
                 } else {
                     Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: isFlush ? FlushRail.glyphSize : 12, weight: .medium))
                         .frame(
-                            width: axis == .vertical ? ServiceRowView.compactRailCellWidth : ServiceRowView.compactCellWidth,
-                            height: axis == .vertical ? ServiceRowView.rowHeight : ServiceRowView.tabHeight
+                            width: axis == .vertical ? compactCellSize.width : ServiceRowView.compactCellWidth,
+                            height: axis == .vertical ? compactCellSize.height : ServiceRowView.tabHeight
                         )
                 }
             }
@@ -1584,6 +1614,57 @@ struct UnifiedRailView: View {
         .disabled(selectedSpaceID == nil)
         .featureTip(.addMacApp, arrowEdge: axis == .vertical ? .trailing : .bottom,
                     isEnabled: selectedSpaceID != nil, appState: appState)
+    }
+
+    /// The bell and the gear at the foot of a left rail: Settings, opened on
+    /// its Notifications tab or on General.
+    private var settingsButtons: some View {
+        VStack(spacing: rowSpacing) {
+            railFooterButton(title: "Notifications", systemImage: "bell") {
+                showSettings(.notifications)
+            }
+            railFooterButton(title: "Settings", systemImage: "gear") {
+                showSettings(.general)
+            }
+        }
+        .padding(.top, rowSpacing)
+        .foregroundStyle(.secondary)
+    }
+
+    /// A footer button, drawn like the add button: a labelled row with names,
+    /// the glyph alone in a cell without.
+    private func railFooterButton(title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Group {
+                if showServiceNames {
+                    HStack(spacing: 8) {
+                        Image(systemName: systemImage)
+                            .font(.system(size: 12, weight: .medium))
+                            .frame(width: 18, height: 18)
+                        Text(title)
+                            .font(ChorusType.label)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 8)
+                    .frame(width: namedRowWidth, height: ServiceRowView.rowHeight)
+                } else {
+                    Image(systemName: systemImage)
+                        .font(.system(size: isFlush ? FlushRail.glyphSize : 12, weight: .medium))
+                        .frame(width: compactCellSize.width, height: compactCellSize.height)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.chromeRow)
+        .help(title)
+        .accessibilityLabel(title)
+    }
+
+    /// Opens Settings on `tab`. Writing the tab first also switches a window
+    /// that is already open, since the tab view reads the same default.
+    private func showSettings(_ tab: SettingsTab) {
+        UserDefaults.standard.set(tab.rawValue, forKey: SettingsTab.defaultsKey)
+        openSettings()
     }
 
     @ViewBuilder

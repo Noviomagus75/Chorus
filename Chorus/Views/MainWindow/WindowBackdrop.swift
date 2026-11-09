@@ -158,3 +158,58 @@ private final class CanvasTintView: NSView {
         layer?.backgroundColor = ChorusColor.canvasNSColor(isDark: isDark).withAlphaComponent(opacity).cgColor
     }
 }
+
+/// The colour of the band along the window's top, the strip that holds the
+/// traffic lights. Off by default, which leaves the band the canvas grey.
+/// Kept in UserDefaults like `WindowGlassStyle`, so it costs no schema version.
+enum TitleBandColor {
+    static let enabledKey = "titleBandColorEnabled"
+    static let hexKey = "titleBandColor"
+    /// A teal, used until the user picks a colour of their own.
+    static let defaultHex = "#2A9D8F"
+
+    /// The stored colour, or the default for anything that is not `#RRGGBB`.
+    static func color(fromHex hex: String) -> Color {
+        Color(nsColor: nsColor(fromHex: hex) ?? nsColor(fromHex: defaultHex)!)
+    }
+
+    static func nsColor(fromHex hex: String) -> NSColor? {
+        var digits = hex.trimmingCharacters(in: .whitespaces)
+        if digits.hasPrefix("#") { digits.removeFirst() }
+        guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
+        return NSColor(
+            srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
+            green: CGFloat((value >> 8) & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+
+    /// `#RRGGBB` in sRGB. Alpha is dropped: the band is always solid.
+    static func hex(from color: Color) -> String {
+        guard let srgb = NSColor(color).usingColorSpace(.sRGB) else { return defaultHex }
+        func byte(_ component: CGFloat) -> Int { Int((min(max(component, 0), 1) * 255).rounded()) }
+        return String(format: "#%02X%02X%02X", byte(srgb.redComponent), byte(srgb.greenComponent), byte(srgb.blueComponent))
+    }
+}
+
+/// Everything behind the window's content: the backdrop, and over its top
+/// edge the coloured band when the user has turned one on.
+struct WindowCanvas: View {
+    let style: WindowGlassStyle
+    let bandHeight: CGFloat
+
+    @AppStorage(TitleBandColor.enabledKey) private var isBandColored = false
+    @AppStorage(TitleBandColor.hexKey) private var bandHex = TitleBandColor.defaultHex
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            WindowBackdrop(style: style)
+            if isBandColored {
+                TitleBandColor.color(fromHex: bandHex)
+                    .frame(height: bandHeight)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+}

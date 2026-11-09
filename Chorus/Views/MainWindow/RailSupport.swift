@@ -778,11 +778,14 @@ struct RailResizeHandle: View {
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
             .padding(.top, topInset)
+            // A flush rail leaves no gap, so the strip straddles the seam
+            // rather than covering the page's first 8 points.
+            .offset(x: showsNames ? 0 : -ChorusCard.gutter / 2)
             .resizeCursor()
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { value in
-                        let start = startWidth ?? (showsNames ? RailWidth.clampNamed(CGFloat(namedWidth)) : ServiceRowView.compactRailWidth)
+                        let start = startWidth ?? (showsNames ? RailWidth.clampNamed(CGFloat(namedWidth)) : FlushRail.width)
                         startWidth = start
                         let result = RailWidth.resolve(proposed: start + value.translation.width, namesOn: showsNames)
                         if result.namesOn != showsNames {

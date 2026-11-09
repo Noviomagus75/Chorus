@@ -4273,6 +4273,44 @@ final class ChorusTests: XCTestCase {
         XCTAssertEqual(UnifiedRailView.barHeight, ChorusCard.topBand)
     }
 
+    /// The left-rail layouts have only the lights in their band, so they get a
+    /// standard title bar's 28 points; the bar layouts keep 52 for their tabs.
+    func testLeftRailLayoutsUseTheSlimTitleBand() {
+        XCTAssertEqual(ChorusCard.band(for: .sidebar), 28)
+        XCTAssertEqual(ChorusCard.band(for: .allServices), 28)
+        XCTAssertEqual(ChorusCard.band(for: .topBars), ChorusCard.topBand)
+        XCTAssertEqual(ChorusCard.band(for: .hybrid), ChorusCard.topBand)
+    }
+
+    /// Only a left rail with icons alone lies flush, and there the cells fit
+    /// the column with even room each side, at a 46 point pitch.
+    func testFlushRailAppliesOnlyToTheIconOnlyLeftRail() {
+        XCTAssertTrue(ChorusCard.isFlush(layout: .sidebar, showsNames: false))
+        XCTAssertTrue(ChorusCard.isFlush(layout: .allServices, showsNames: false))
+        XCTAssertFalse(ChorusCard.isFlush(layout: .sidebar, showsNames: true))
+        XCTAssertFalse(ChorusCard.isFlush(layout: .topBars, showsNames: false))
+        XCTAssertFalse(ChorusCard.isFlush(layout: .hybrid, showsNames: false))
+        XCTAssertEqual(ChorusCard.gutter(isFlush: true), 0)
+        XCTAssertEqual(ChorusCard.gutter(isFlush: false), ChorusCard.gutter)
+
+        XCTAssertLessThan(FlushRail.iconSize, FlushRail.cellSize)
+        XCTAssertLessThanOrEqual(FlushRail.cellSize, FlushRail.width)
+        XCTAssertEqual(FlushRail.cellSize + FlushRail.spacing, 46)
+        // Still past the point where a drag of the edge brings names back.
+        XCTAssertGreaterThan(RailWidth.collapseBelow, FlushRail.width)
+    }
+
+    /// The title bar colour round-trips through its `#RRGGBB` string, and a
+    /// stored value that is not one falls back to the default.
+    func testTitleBandColorRoundTripsThroughHex() {
+        for hex in ["#2A9D8F", "#000000", "#FFFFFF", "#12AB34"] {
+            XCTAssertEqual(TitleBandColor.hex(from: TitleBandColor.color(fromHex: hex)), hex)
+        }
+        XCTAssertEqual(TitleBandColor.hex(from: TitleBandColor.color(fromHex: "2a9d8f")), "#2A9D8F")
+        XCTAssertNil(TitleBandColor.nsColor(fromHex: "teal"))
+        XCTAssertEqual(TitleBandColor.hex(from: TitleBandColor.color(fromHex: "#12")), TitleBandColor.defaultHex)
+    }
+
     /// Glass is Off unless asked for, falls back to Off for anything it does
     /// not recognise, and is Off everywhere under Reduce Transparency. The
     /// picker's three names are distinct.

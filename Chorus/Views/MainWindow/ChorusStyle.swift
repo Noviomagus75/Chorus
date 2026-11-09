@@ -242,12 +242,56 @@ enum ChorusCard {
     /// macOS 26 with "Always show scroll bars" on).
     static let webCornerRadius = ChorusRadius.control
     /// The band along the top of every layout: the traffic lights, centred in
-    /// it by `TrafficLightsPositioner`, then the bar or the nav row, and the
-    /// donation button. The cards start under it, so their top edges line up.
+    /// it by `TrafficLightsPositioner`, then the bar, and the donation button.
+    /// The cards start under it, so their top edges line up. The left-rail
+    /// layouts use the slimmer `titleBand` instead.
     static let topBand: CGFloat = 52
+    /// The band in the two left-rail layouts, which have no bar and no nav
+    /// row: the height of a standard macOS title bar, holding only the lights.
+    static let titleBand: CGFloat = 28
+
+    /// The band the given layout puts along the window's top. The bar layouts
+    /// keep their tabs in it, so they keep the taller one.
+    static func band(for layout: RailLayout) -> CGFloat {
+        layout.hasTopBar ? topBand : titleBand
+    }
+
+    /// Whether the window drops its gutter and card corners: a left rail with
+    /// icons alone. The rail and the page then run to the window's edges. See
+    /// `FlushRail`.
+    static func isFlush(layout: RailLayout, showsNames: Bool) -> Bool {
+        !layout.hasTopBar && !showsNames
+    }
+
+    /// The gutter round the web card: none when the window is flush.
+    static func gutter(isFlush: Bool) -> CGFloat {
+        isFlush ? 0 : gutter
+    }
+
     /// Space between the rail card's edge and the rows inside it. Six, so a
     /// row's corner nests inside the card's: 14 less 6 is the rows' 8.
     static let railPadding: CGFloat = 6
+}
+
+/// The left rail with icons alone, laid flush against the window: no gutter,
+/// larger icons and more room between them than the carded rail.
+enum FlushRail {
+    /// The rail's whole width, from the window's edge to the page's.
+    static let width: CGFloat = 53
+    /// A cell's side. The selection fill covers it.
+    static let cellSize: CGFloat = 42
+    /// The service icon inside the cell.
+    static let iconSize: CGFloat = 27
+    /// Plus, bell and gear: the glyph inside a footer cell.
+    static let glyphSize: CGFloat = 13.5
+    /// Space between two cells: a 46 point pitch.
+    static let spacing: CGFloat = 4
+}
+
+extension EnvironmentValues {
+    /// Set by the left rail when it is flush, so its rows draw at the
+    /// `FlushRail` sizes. Everything else keeps the carded sizes.
+    @Entry var isFlushRail = false
 }
 
 /// The nav buttons in the top band.
@@ -304,7 +348,7 @@ extension View {
     /// is one list leaves it off and sits on the window, and the all-services
     /// rail draws a card per space instead.
     @ViewBuilder
-    func railCardFrame(width: CGFloat, topInset: CGFloat, carded: Bool = true) -> some View {
+    func railCardFrame(width: CGFloat, topInset: CGFloat, carded: Bool = true, gutter: CGFloat = ChorusCard.gutter) -> some View {
         let column = frame(width: width)
         Group {
             if carded {
@@ -313,9 +357,9 @@ extension View {
                 column
             }
         }
-        .padding(.leading, ChorusCard.gutter)
+        .padding(.leading, gutter)
         .padding(.top, topInset)
-        .padding(.bottom, ChorusCard.gutter)
+        .padding(.bottom, gutter)
     }
 
     /// Draws this view as the inset content card: the card grey behind it,
@@ -323,8 +367,8 @@ extension View {
     /// `ChorusCard.webCornerRadius`) and a hairline edge. The page itself is also
     /// clipped by `WebViewHostView`'s layer, because a SwiftUI clip is not
     /// promised to reach into a hosted `NSView`.
-    func contentCard() -> some View {
-        let shape = RoundedRectangle(cornerRadius: ChorusCard.webCornerRadius, style: .continuous)
+    func contentCard(cornerRadius: CGFloat = ChorusCard.webCornerRadius) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         return background(ChorusColor.card)
             .clipShape(shape)
             .overlay(

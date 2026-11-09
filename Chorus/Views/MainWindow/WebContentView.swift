@@ -12,23 +12,21 @@ struct WebContentView: View {
     @State private var transitionSnapshot: NSImage?
     @State private var previousServiceID: UUID?
     @State private var showPasskeyNotice = false
-    @AppStorage(ServiceNameVisibility.defaultsKey) private var showServiceNames = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(ServiceNameVisibility.defaultsKey) private var showServiceNames = true
+
+    /// Whether the card runs to the window's edges, square-cornered. See
+    /// `ChorusCard.isFlush`.
+    private var isFlush: Bool {
+        ChorusCard.isFlush(layout: appState.railLayout, showsNames: showServiceNames)
+    }
+
+    private var cardCornerRadius: CGFloat {
+        isFlush ? 0 : ChorusCard.webCornerRadius
+    }
 
     /// Shared nav state so the top tab bar can host the nav buttons.
     private var webViewState: WebViewState { appState.webViewState }
-
-    /// How far the traffic lights reach past a left rail into this view's top
-    /// row. With names off the rail is 52 points, narrower than the lights, and
-    /// the back button sat under the green one. The bar layouts put their own
-    /// bar on top, so nothing here reaches the lights.
-    private var trafficLightsOverhang: CGFloat {
-        guard !appState.railLayout.hasTopBar else { return 0 }
-        return SpaceStripMetrics.barLeadingInset(
-            stripWidth: showServiceNames ? ServiceRowView.railWidth : ServiceRowView.compactRailWidth,
-            lightsWidth: SpaceStripMetrics.trafficLightsWidth
-        )
-    }
 
     private var selectedService: ServiceInstance? {
         guard let id = selectedServiceID else { return nil }
@@ -48,21 +46,11 @@ struct WebContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let service = selectedService, currentWebView != nil {
-                // Both bar layouts host the nav buttons in the top bar itself.
-                // The two left-rail layouts have no top bar, so they get a slim
-                // navigation row above the card, on the canvas.
-                if !appState.railLayout.hasTopBar {
-                    // The gutter puts the first circle on the web card's edge.
-                    WebNavButtons(webViewState: webViewState, homeURL: URL(string: service.url))
-                        .padding(.horizontal, ChorusCard.gutter)
-                        .padding(.leading, trafficLightsOverhang)
-                        .frame(maxWidth: .infinity, minHeight: ChorusCard.topBand, alignment: .leading)
-                }
-            } else if !appState.railLayout.hasTopBar {
-                // No page, no buttons, but the band stays, so the card keeps its
-                // top edge level with the rail card's.
-                Color.clear.frame(height: ChorusCard.topBand)
+            // Both bar layouts host the nav buttons in the top bar itself. The
+            // two left-rail layouts carry no buttons up here: only the slim
+            // title band, so the card's top edge sits level with the rail's.
+            if !appState.railLayout.hasTopBar {
+                Color.clear.frame(height: ChorusCard.titleBand)
             }
 
             // The notices sit between the nav row and the card, pushing the
@@ -79,7 +67,7 @@ struct WebContentView: View {
             // placeholder and the empty state alike, so the window keeps its
             // shape while a service loads or when there is none.
             cardContent
-                .contentCard()
+                .contentCard(cornerRadius: cardCornerRadius)
 
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: showPasskeyNotice)
@@ -144,7 +132,7 @@ struct WebContentView: View {
         ZStack(alignment: .topTrailing) {
             WebViewContainer(
                 webView: webView,
-                cornerRadius: ChorusCard.webCornerRadius,
+                cornerRadius: cardCornerRadius,
                 parking: appState.webViewPool.parking
             )
 

@@ -52,6 +52,9 @@ struct ServiceRowView: View {
     @State private var isHovering = false
     /// The rail's width, which the named row fills. See `RailWidth`.
     @Environment(\.railWidth) private var railWidth
+    /// Whether the rail lies flush, which draws the nameless cell larger. See
+    /// `FlushRail`.
+    @Environment(\.isFlushRail) private var isFlushRail
 
     /// The rail's default width with names, gutter included; the rail itself can
     /// be dragged from 150 to 300 (see `RailWidth`). A row is that less the 8
@@ -154,18 +157,21 @@ struct ServiceRowView: View {
     /// with it: four things on an 18 point icon is what the audit called
     /// unreadable, and all three are still in the tooltip and the spoken label.
     private var compactContent: some View {
-        ServiceIconSquare(
+        let isLarge = axis == .vertical && isFlushRail
+        let iconSize = isLarge ? FlushRail.iconSize : Self.iconSize
+        return ServiceIconSquare(
             instance: instance,
-            size: Self.iconSize,
-            cornerRadius: Self.iconCornerRadius
+            size: iconSize,
+            // The corner grows with the icon, so it keeps its shape.
+            cornerRadius: Self.iconCornerRadius * iconSize / Self.iconSize
         )
         .overlay(alignment: .bottomTrailing) {
             ServiceHealthDot(health: health)
                 .offset(x: 3, y: 3)
         }
         .frame(
-            width: axis == .vertical ? Self.compactRailCellWidth : Self.compactCellWidth,
-            height: axis == .vertical ? Self.rowHeight : Self.tabHeight
+            width: isLarge ? FlushRail.cellSize : (axis == .vertical ? Self.compactRailCellWidth : Self.compactCellWidth),
+            height: isLarge ? FlushRail.cellSize : (axis == .vertical ? Self.rowHeight : Self.tabHeight)
         )
         // On the cell, not the icon, so it sits over the corner that the
         // selection fill and the focus ring are drawn on.

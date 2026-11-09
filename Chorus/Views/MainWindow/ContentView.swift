@@ -28,13 +28,14 @@ struct ContentView: View {
             serviceSelection: $state.selectedServiceID
         )
         .frame(minWidth: 800, minHeight: 500)
-        // The canvas behind everything, frosted when a glass style is on.
-        // It also keeps the traffic-light insets from showing the
+        // The canvas behind everything, frosted when a glass style is on, with
+        // the title band in the user's colour when one is set. It also keeps the traffic-light insets from showing the
         // title-bar vibrancy (the top-left tint).
         .background(
-            WindowBackdrop(
+            WindowCanvas(
                 style: WindowGlassStyle.resolve(glassStyleRaw)
-                    .effective(reduceTransparency: reduceTransparency)
+                    .effective(reduceTransparency: reduceTransparency),
+                bandHeight: ChorusCard.band(for: appState.railLayout)
             )
         )
         // The traffic lights hold the top-left, so the donation button takes
@@ -55,7 +56,7 @@ struct ContentView: View {
         // WindowDragHandles move the window instead. The sidebar keeps the
         // normal title-bar drag.
         .background(WindowMovableConfigurator(isMovable: !appState.railLayout.hasTopBar))
-        .background(TrafficLightsPositioner(bandHeight: ChorusCard.topBand))
+        .background(TrafficLightsPositioner(bandHeight: ChorusCard.band(for: appState.railLayout)))
         // Ask for macOS notification permission here, not in AppState.init:
         // requesting during App.init (before the scene exists) can fail with
         // "Notifications are not allowed for this application" and leave the app
@@ -193,13 +194,13 @@ struct ContentView: View {
         let lightsWidth = SpaceStripMetrics.trafficLightsWidth
 
         switch appState.railLayout {
-        // The two left rails sit under the top band, where the traffic lights
-        // are, so both cards start at the same height.
+        // The two left rails sit under the slim title band, which holds only
+        // the traffic lights, so the rail and the web card start level.
         case .sidebar:
             HStack(spacing: 0) {
-                rail(axis: .vertical, spaceSelection: spaceSelection, serviceSelection: serviceSelection, contentInset: ChorusCard.topBand)
+                rail(axis: .vertical, spaceSelection: spaceSelection, serviceSelection: serviceSelection, contentInset: ChorusCard.titleBand)
                 webContent
-                    .overlay(alignment: .leading) { RailResizeHandle(showsNames: $showServiceNames, namedWidth: $railNamedWidth, topInset: ChorusCard.topBand) }
+                    .overlay(alignment: .leading) { RailResizeHandle(showsNames: $showServiceNames, namedWidth: $railNamedWidth, topInset: ChorusCard.titleBand) }
             }
         case .allServices:
             HStack(spacing: 0) {
@@ -207,12 +208,12 @@ struct ContentView: View {
                     axis: .vertical,
                     spaceSelection: spaceSelection,
                     serviceSelection: serviceSelection,
-                    contentInset: ChorusCard.topBand,
+                    contentInset: ChorusCard.titleBand,
                     showsSpaceHeader: false,
                     showsAllSpaces: true
                 )
                 webContent
-                    .overlay(alignment: .leading) { RailResizeHandle(showsNames: $showServiceNames, namedWidth: $railNamedWidth, topInset: ChorusCard.topBand) }
+                    .overlay(alignment: .leading) { RailResizeHandle(showsNames: $showServiceNames, namedWidth: $railNamedWidth, topInset: ChorusCard.titleBand) }
             }
         case .topBars:
             VStack(spacing: 0) {
@@ -301,21 +302,24 @@ struct ContentView: View {
     }
 
     /// The web view on its inset card. The gutter runs round three sides; the
-    /// top is left to whatever sits above the card, the nav row or the bar,
-    /// which already spaces itself off the window edge.
+    /// top is left to whatever sits above the card, the title band or the
+    /// bar. A flush window has no gutter. See `ChorusCard.isFlush`.
     private var webContent: some View {
         WebContentView(selectedServiceID: appState.selectedServiceID)
-            .padding([.horizontal, .bottom], ChorusCard.gutter)
+            .padding(
+                [.horizontal, .bottom],
+                ChorusCard.gutter(isFlush: ChorusCard.isFlush(layout: appState.railLayout, showsNames: showServiceNames))
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Web content")
     }
 
-    /// Centres the donation button's 20 point chip in the 52 point band, which
-    /// every layout has along its top. The overhang comes off because the chip
-    /// is centred inside a larger click target.
+    /// Centres the donation button's 20 point chip in the band every layout
+    /// has along its top. The overhang comes off because the chip is centred
+    /// inside a larger click target.
     private var supportButtonTopInset: CGFloat {
-        (ChorusCard.topBand - SupportButtonMetrics.chipSize) / 2 - SupportButtonMetrics.targetOverhang
+        (ChorusCard.band(for: appState.railLayout) - SupportButtonMetrics.chipSize) / 2 - SupportButtonMetrics.targetOverhang
     }
 
     private func selectFirstService(in spaceID: UUID) {
